@@ -1,0 +1,24 @@
+services:
+  flask-app:
+    build: .
+    container_name: flask-app
+    ports:
+      - "5000:5000"
+    environment:
+      # Redis connection settings
+      # Use host.docker.internal to connect to Redis on the host machine
+      - REDIS_HOST=host.docker.internal
+      - REDIS_PORT=6379
+      - REDIS_USER=myuser
+      - REDIS_PASSWORD=mypassword
+      - REDIS_DB=0
+    extra_hosts:
+      # This allows the container to access the host machine
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    networks:
+      - flask-network
+
+networks:
+  flask-network:
+    driver: bridge

@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lab 8.1: Flask Redis Application</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+            font-weight: 500;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background 0.3s;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #5568d3;
+        }
+        .btn-danger {
+            background: #e74c3c;
+        }
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+        .btn-success {
+            background: #27ae60;
+        }
+        .btn-success:hover {
+            background: #229954;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            display: none;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        #allData {
+            margin-top: 20px;
+        }
+        .data-item {
+            background: #f8f9fa;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            border-left: 4px solid #667eea;
+        }
+        .data-key {
+            font-weight: bold;
+            color: #667eea;
+        }
+        .status {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Flask Web Application with Redis</h1>
+        
+        <div class="card">
+            <h2>Connection Status <span id="status" class="status">Checking...</span></h2>
+            <button onclick="checkHealth()">Check Connection</button>
+        </div>
+
+        <div class="card">
+            <h2>Set Key-Value</h2>
+            <div class="form-group">
+                <label for="setKey">Key:</label>
+                <input type="text" id="setKey" placeholder="Enter key">
+            </div>
+            <div class="form-group">
+                <label for="setValue">Value:</label>
+                <input type="text" id="setValue" placeholder="Enter value">
+            </div>
+            <button onclick="setValue()">Set Value</button>
+        </div>
+
+        <div class="card">
+            <h2>Get Value by Key</h2>
+            <div class="form-group">
+                <label for="getKey">Key:</label>
+                <input type="text" id="getKey" placeholder="Enter key to retrieve">
+            </div>
+            <button onclick="getValue()">Get Value</button>
+        </div>
+
+        <div class="card">
+            <h2>Delete Key</h2>
+            <div class="form-group">
+                <label for="deleteKey">Key:</label>
+                <input type="text" id="deleteKey" placeholder="Enter key to delete">
+            </div>
+            <button class="btn-danger" onclick="deleteValue()">Delete Key</button>
+        </div>
+
+        <div class="card">
+            <h2>Counter Operations</h2>
+            <div class="form-group">
+                <label for="counterKey">Counter Key:</label>
+                <input type="text" id="counterKey" placeholder="Enter counter key" value="counter">
+            </div>
+            <button class="btn-success" onclick="incrementCounter()">Increment Counter</button>
+        </div>
+
+        <div class="card">
+            <h2>All Stored Data</h2>
+            <button onclick="getAllData()">Refresh All Data</button>
+            <div id="allData"></div>
+        </div>
+
+        <div id="result"></div>
+    </div>
+
+    <script>
+        function showResult(message, isSuccess = true) {
+            const result = document.getElementById('result');
+            result.textContent = message;
+            result.className = isSuccess ? 'success' : 'error';
+            result.style.display = 'block';
+            setTimeout(() => {
+                result.style.display = 'none';
+            }, 5000);
+        }
+
+        async function checkHealth() {
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+                const statusEl = document.getElementById('status');
+                
+                if (data.redis === 'connected') {
+                    statusEl.textContent = 'Connected';
+                    statusEl.className = 'status connected';
+                    showResult('Redis connection is healthy!', true);
+                } else {
+                    statusEl.textContent = 'Disconnected';
+                    statusEl.className = 'status disconnected';
+                    showResult('Redis connection failed!', false);
+                }
+            } catch (error) {
+                showResult('Error checking connection: ' + error.message, false);
+            }
+        }
+
+        async function setValue() {
+            const key = document.getElementById('setKey').value;
+            const value = document.getElementById('setValue').value;
+
+            if (!key || !value) {
+                showResult('Please enter both key and value', false);
+                return;
+            }
+
+            try {
+                const response = await fetch('/set', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({key, value})
+                });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult(`Successfully set ${key} = ${value}`, true);
+                    document.getElementById('setKey').value = '';
+                    document.getElementById('setValue').value = '';
+                    getAllData();
+                } else {
+                    showResult(data.error || 'Error setting value', false);
+                }
+            } catch (error) {
+                showResult('Error: ' + error.message, false);
+            }
+        }
+
+        async function getValue() {
+            const key = document.getElementById('getKey').value;
+
+            if (!key) {
+                showResult('Please enter a key', false);
+                return;
+            }
+
+            try {
+                const response = await fetch(`/get/${key}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult(`${key} = ${data.value}`, true);
+                } else {
+                    showResult(data.message || 'Key not found', false);
+                }
+            } catch (error) {
+                showResult('Error: ' + error.message, false);
+            }
+        }
+
+        async function deleteValue() {
+            const key = document.getElementById('deleteKey').value;
+
+            if (!key) {
+                showResult('Please enter a key', false);
+                return;
+            }
+
+            try {
+                const response = await fetch(`/delete/${key}`, {method: 'DELETE'});
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult(`Successfully deleted key: ${key}`, true);
+                    document.getElementById('deleteKey').value = '';
+                    getAllData();
+                } else {
+                    showResult(data.message || 'Error deleting key', false);
+                }
+            } catch (error) {
+                showResult('Error: ' + error.message, false);
+            }
+        }
+
+        async function incrementCounter() {
+            const key = document.getElementById('counterKey').value || 'counter';
+
+            try {
+                const response = await fetch('/counter/increment', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({key})
+                });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult(`Counter ${key} incremented to ${data.value}`, true);
+                    getAllData();
+                } else {
+                    showResult(data.error || 'Error incrementing counter', false);
+                }
+            } catch (error) {
+                showResult('Error: ' + error.message, false);
+            }
+        }
+
+        async function getAllData() {
+            try {
+                const response = await fetch('/all');
+                const result = await response.json();
+                
+                const allDataDiv = document.getElementById('allData');
+                
+                if (result.count === 0) {
+                    allDataDiv.innerHTML = '<p style="margin-top: 15px; color: #666;">No data stored in Redis</p>';
+                    return;
+                }
+
+                let html = `<p style="margin-top: 15px; color: #666;">Total keys: ${result.count}</p>`;
+                for (const [key, value] of Object.entries(result.data)) {
+                    html += `
+                        <div class="data-item">
+                            <span class="data-key">${key}:</span> ${value}
+                        </div>
+                    `;
+                }
+                allDataDiv.innerHTML = html;
+            } catch (error) {
+                showResult('Error fetching data: ' + error.message, false);
+            }
+        }
+
+        // Check connection on load
+        window.onload = () => {
+            checkHealth();
+            getAllData();
+        };
+    </script>
+</body>
+</html>
